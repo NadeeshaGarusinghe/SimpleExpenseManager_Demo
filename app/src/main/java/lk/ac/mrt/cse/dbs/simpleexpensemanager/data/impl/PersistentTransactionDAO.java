@@ -13,20 +13,15 @@ import lk.ac.mrt.cse.dbs.simpleexpensemanager.data.model.Transaction;
  */
 
 public class PersistentTransactionDAO implements TransactionDAO {
+    private DatabaseHelper databaseHelper;
 
     public PersistentTransactionDAO(DatabaseHelper databaseHelper) {
         this.databaseHelper = databaseHelper;
     }
 
-    private DatabaseHelper databaseHelper;
-
-    public DatabaseHelper getDatabaseHelper() {
-        return databaseHelper;
-    }
-
     @Override
     public void logTransaction(Date date, String accountNo, ExpenseType expenseType, double amount) {
-
+        databaseHelper.logTransaction(date,accountNo,expenseType,amount);
     }
 
     @Override
@@ -36,6 +31,6 @@ public class PersistentTransactionDAO implements TransactionDAO {
 
     @Override
     public List<Transaction> getPaginatedTransactionLogs(int limit) {
-        return databaseHelper.getPaginatedTransactionLogs(int limit);
+        return databaseHelper.getPaginatedTransactionLogs(limit);
     }
 }

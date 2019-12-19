@@ -3,14 +3,19 @@ package lk.ac.mrt.cse.dbs.simpleexpensemanager.data;
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
+import android.database.DatabaseUtils;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
-import lk.ac.mrt.cse.dbs.simpleexpensemanager.control.PersistentExpenseManager;
+import lk.ac.mrt.cse.dbs.simpleexpensemanager.data.exception.InvalidAccountException;
 import lk.ac.mrt.cse.dbs.simpleexpensemanager.data.model.Account;
+import lk.ac.mrt.cse.dbs.simpleexpensemanager.data.model.ExpenseType;
 import lk.ac.mrt.cse.dbs.simpleexpensemanager.data.model.Transaction;
 
 /**
@@ -47,76 +52,196 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     public void removeData(String accountNumber){
         SQLiteDatabase db=this.getWritableDatabase();
-        db.delete("account","accountNo="+accountNumber,null);
+        String selection = "accountNo = ?";
+        String[] selectionArgs = { accountNumber };
+        db.delete("account", selection, selectionArgs);
     }
 
     public Account getAccount(String accountNumber){
         String[] columns = {"accountNo","bankName","accountHolderName","balance"};
         String[] selectionArgs = {accountNumber};
 
-        SQLiteDatabase db=this.getWritableDatabase();
-        Cursor cursor = db.query("account",columns,"accountNo =?",selectionArgs,null,null,null);
-        String accountNo=cursor.getString(cursor.getColumnIndex("accountNo"));
-        String bankName=cursor.getString(cursor.getColumnIndex("bankName"));
-        String accountHolderName=cursor.getString(cursor.getColumnIndex("accountHolderName"));
-        String balance=cursor.getString(cursor.getColumnIndex("balance"));
+        SQLiteDatabase db=this.getReadableDatabase();
+        Cursor cursor = db.query("account",columns,"accountNo = ?",selectionArgs,null,null,null);
 
-        return new Account(accountNo,bankName,accountHolderName,Double.parseDouble(balance));
+        Account account = null;
+        while(cursor.moveToNext()) {
+            String accountNo = cursor.getString(cursor.getColumnIndexOrThrow("accountNo"));
+            String bankName = cursor.getString(cursor.getColumnIndexOrThrow("bankName"));
+            String accountHolderName = cursor.getString(cursor.getColumnIndexOrThrow("accountHolderName"));
+            double balance = cursor.getDouble(cursor.getColumnIndexOrThrow("balance"));
+
+            account = new Account(accountNo, bankName, accountHolderName, balance);
+        }
+        cursor.close();
+        return account;
     }
 
     public List<String> getAccountNumbersList(){
 
-        List<String> accountList = new ArrayList<>();
+        List<String> accounNumbertList = new ArrayList<>();
 
-        SQLiteDatabase db=this.getWritableDatabase();
+        SQLiteDatabase db=this.getReadableDatabase();
         String[] columns = {"accountNo"};
 
         Cursor cursor = db.query("account",columns,null,null,null,null,null);
-        for (String result : cursor.getColumnNames()){
-            accountList.add(result);
+
+        while(cursor.moveToNext()) {
+            String itemId = cursor.getString(cursor.getColumnIndexOrThrow("accountNo"));
+            accounNumbertList.add(itemId);
         }
 
-        return accountList;
+        cursor.close();
+        return accounNumbertList;
     }
 
     public List<Account> getAccountsList(){
         List<Account> accountList = new ArrayList<>();
 
-        SQLiteDatabase db=this.getWritableDatabase();
-        String[] columns = {"accountNo"};
+        SQLiteDatabase db=this.getReadableDatabase();
+        String[] columns = {"accountNo","bankName", "accountHolderName","balance"};
 
         Cursor cursor = db.query("account",columns,null,null,null,null,null);
-        for (String result : cursor.getColumnNames()){
-            accountList.add(new Account(result,null,null,0));
+
+        while(cursor.moveToNext()) {
+            String accountNo = cursor.getString(cursor.getColumnIndexOrThrow("accountNo"));
+            String bankName = cursor.getString(cursor.getColumnIndexOrThrow("bankName"));
+            String accountHolderName = cursor.getString(cursor.getColumnIndexOrThrow("accountHolderName"));
+            double balance = cursor.getDouble(cursor.getColumnIndexOrThrow("balance"));
+
+            Account account = new Account(accountNo, bankName, accountHolderName, balance);
+            accountList.add(account);
         }
+
+        cursor.close();
         return accountList;
     }
 
+    public void logTransaction(Date date, String accountNo, ExpenseType expenseType, double amount) {
+
+        SQLiteDatabase db = this.getWritableDatabase();
+
+        ContentValues values = new ContentValues();
+        values.put("accountNo",accountNo);
+        values.put("date", date.toString());
+        values.put("expenceType",expenseType.toString());
+        values.put("amount",amount);
+
+        long newRowId = db.insert("Transactions", null, values);
+    }
 
     public List<Transaction> getAllTransactionLogs(){
         List<Transaction> transactionList = new ArrayList<>();
 
-        SQLiteDatabase db=this.getWritableDatabase();
-        String[] columns = {"accountNo"};
+        SQLiteDatabase db=this.getReadableDatabase();
+        String[] columns = {"date","accountNo", "expenceType","amount"};
 
         Cursor cursor = db.query("transaction",columns,null,null,null,null,null);
-        for (String result : cursor.getColumnNames()){
-            transactionList.add(new Transaction(null,result,null,0));
+
+        while(cursor.moveToNext()) {
+            String date = cursor.getString(cursor.getColumnIndexOrThrow("date"));
+            String accountNo = cursor.getString(cursor.getColumnIndexOrThrow("accountNo"));
+            String expenceType = cursor.getString(cursor.getColumnIndexOrThrow("expenceType"));
+            double amount = cursor.getDouble(cursor.getColumnIndexOrThrow("amount"));
+
+            ExpenseType x = null;
+
+            if(expenceType.equals("EXPENSE")){
+                x = ExpenseType.EXPENSE;
+            }
+            else{
+                x = ExpenseType.INCOME;
+            }
+
+            Date date1= null;
+            try {
+                date1 = new SimpleDateFormat("EEE MMM d HH:mm:ss zzz yyyy").parse(date);
+            } catch (ParseException e) {
+                e.printStackTrace();
+            }
+
+            Transaction myacc = new Transaction(date1, accountNo, x, amount);
+            transactionList.add(myacc);
         }
+        cursor.close();
         return transactionList;
     }
 
-
     public List<Transaction> getPaginatedTransactionLogs(int limit){
-        List<Transaction> paginatedTransactionLogs = new ArrayList<>();
+        SQLiteDatabase db=this.getReadableDatabase();
 
-        SQLiteDatabase db=this.getWritableDatabase();
-        String[] columns = {"accountNo"};
+        long cnt  = DatabaseUtils.queryNumEntries(db, "Transactions");
 
-        Cursor cursor = db.query("transaction",columns,null,null,null,null,null,Integer.toString(limit));
-        for (String result : cursor.getColumnNames()){
-            paginatedTransactionLogs.add(new Transaction(null,result,null,0));
+        if(limit<=cnt){
+            return getAllTransactionLogs();
         }
-        return paginatedTransactionLogs;
+        else{
+            String[] columns = {"date","accountNo", "expenceType","amount"};
+            Cursor cursor = db.query("Transactions", columns,null,null,null,null,null);
+            List<Transaction> transactions = new ArrayList<>();
+            int count = 0;
+
+            while(cursor.moveToNext() && count< limit) {
+
+                String date = cursor.getString(cursor.getColumnIndexOrThrow("date"));
+                String accountNo = cursor.getString(cursor.getColumnIndexOrThrow("accountNo"));
+                String expenceType = cursor.getString(cursor.getColumnIndexOrThrow("expenceType"));
+                double amount = cursor.getDouble(cursor.getColumnIndexOrThrow("amount"));
+
+                ExpenseType x = null;
+
+                if(expenceType.equals("EXPENSE")){
+                    x = ExpenseType.EXPENSE;
+                }
+                else{
+                    x = ExpenseType.INCOME;
+                }
+
+                Date date1= null;
+                try {
+                    date1 = new SimpleDateFormat("EEE MMM d HH:mm:ss zzz yyyy").parse(date);
+
+                } catch (ParseException e) {
+
+                    e.printStackTrace();
+                }
+
+                Transaction myacc = new Transaction(date1, accountNo, x, amount);
+                transactions.add(myacc);
+                count++;
+            }
+
+            cursor.close();
+            return transactions;
+        }
+    }
+
+    public void updateBalance(String accountNo, ExpenseType expenseType, double amount) throws InvalidAccountException {
+
+        SQLiteDatabase db = this.getWritableDatabase();
+        Account tempAccount = getAccount(accountNo);
+
+        double value = 0;
+
+        switch (expenseType) {
+            case EXPENSE:
+                value = tempAccount.getBalance() - amount;
+                break;
+            case INCOME:
+                value = tempAccount.getBalance() + amount;
+                break;
+        }
+
+        ContentValues values = new ContentValues();
+        values.put("balance" , value );
+
+        String selection = "accountNo = ?";
+        String[] selectionArgs = { accountNo };
+
+        int count = db.update(
+                "Accounts",
+                values,
+                selection,
+                selectionArgs);
     }
 }
